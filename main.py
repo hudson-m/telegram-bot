@@ -13,6 +13,7 @@ logging.basicConfig(
 import pytz
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from conversation import get_history, save_history, clear_history
 import anthropic
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -159,8 +160,9 @@ Regras:
 5. Confirme o agendamento de forma curta e direta
 6. Responda sempre em português, de forma informal"""
 
-async def process_message(text: str) -> str:
-    messages = [{"role": "user", "content": text}]
+async def process_message(user_id: int, text: str) -> str:
+    messages = get_history(user_id)
+    messages.append({"role": "user", "content": text})
     while True:
         response = claude.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -170,6 +172,8 @@ async def process_message(text: str) -> str:
             messages=messages
         )
         if response.stop_reason == "end_turn":
+            messages.append({"role": "assistant", "content": response.content})
+            save_history(user_id, messages)
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text
@@ -193,7 +197,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
         return
     await update.message.reply_chat_action("typing")
-    reply = await process_message(update.message.text)
+    reply = await process_message(update.effective_user.id, update.message.text)
     await update.message.reply_text(reply)
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -202,10 +206,15 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Seu ID: `{update.effective_user.id}`", parse_mode="Markdown")
 
+async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    clear_history(update.effective_user.id)
+    await update.message.reply_text("Histórico limpo.")
+
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("myid", cmd_myid))
+    app.add_handler(CommandHandler("clear", cmd_clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
