@@ -14,6 +14,7 @@ import pytz
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 from conversation import get_history, save_history, clear_history
+from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 import anthropic
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -131,7 +132,8 @@ def execute_tool(name: str, inp: dict) -> str:
         ).execute()
         events = [
             {"id": e["id"], "summary": e.get("summary", "Sem título"),
-             "start": e.get("start", {}).get("dateTime", e.get("start", {}).get("date", ""))}
+             "start": e.get("start", {}).get("dateTime", e.get("start", {}).get("date", ""))
+             }
             for e in result.get("items", [])
         ]
         return json.dumps(events)
@@ -143,8 +145,8 @@ def execute_tool(name: str, inp: dict) -> str:
 
     return json.dumps({"error": "Ferramenta desconhecida"})
 
-SYSTEM_PROMPT = """Você é o assistente pessoal do Hudson, morando em Curitiba-PR (fuso America/Sao_Paulo).
-Sua função principal é gerenciar a agenda dele no Google Calendar.
+BASE_SYSTEM_PROMPT = """Você é o assistente pessoal do Hudson, morando em Curitiba-PR (fuso America/Sao_Paulo).
+Sua função principal é gerenciar a agenda dele no Google Calendar e ser um assistente de confiança.
 
 Calendários:
 - principal: compromissos gerais
@@ -158,22 +160,37 @@ Regras:
 3. Se não souber o horário de fim, assuma 1 hora de duração
 4. Escolha o calendário certo conforme o tipo do evento
 5. Confirme o agendamento de forma curta e direta
-6. Responda sempre em português, de forma informal"""
+6. Responda sempre em português, de forma informal
+7. Use as memórias abaixo para personalizar respostas e manter continuidade entre conversas
+
+{memories_section}"""
+
+def build_system_prompt(user_id: int) -> str:
+    memories = get_memories(user_id)
+    if memories:
+        memories_text = "Memórias sobre o Hudson:\n" + "\n".join(f"- {m}" for m in memories)
+    else:
+        memories_text = "Nenhuma memória registrada ainda."
+    return BASE_SYSTEM_PROMPT.format(memories_section=memories_text)
 
 async def process_message(user_id: int, text: str) -> str:
     messages = get_history(user_id)
     messages.append({"role": "user", "content": text})
+    system_prompt = build_system_prompt(user_id)
+
     while True:
         response = claude.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=512,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             tools=TOOLS,
             messages=messages
         )
         if response.stop_reason == "end_turn":
             messages.append({"role": "assistant", "content": response.content})
             save_history(user_id, messages)
+            # Extrai memórias em background sem bloquear a resposta
+            asyncio.get_event_loop().run_in_executor(None, extract_and_save, user_id, messages)
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text
@@ -201,20 +218,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi! Me diz o que quer agendar.")
+    await update.message.reply_text("Oi! Me diz o que quer agendar ou o que precisa.")
 
 async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Seu ID: `{update.effective_user.id}`", parse_mode="Markdown")
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_history(update.effective_user.id)
-    await update.message.reply_text("Histórico limpo.")
+    await update.message.reply_text("Histórico da sessão limpo.")
+
+async def cmd_memories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rows = get_memories_with_ids(update.effective_user.id)
+    if not rows:
+        await update.message.reply_text("Nenhuma memória registrada ainda.")
+        return
+    lines = []
+    for mem_id, content, created_at in rows:
+        from datetime import datetime
+        import pytz
+        dt = datetime.fromtimestamp(created_at, tz=pytz.timezone(TIMEZONE))
+        lines.append(f"[{mem_id}] {dt.strftime('%d/%m')} — {content}")
+    await update.message.reply_text("\n".join(lines))
+
+async def cmd_forget(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remove uma memória específica pelo ID: /forget 42"""
+    from memory import delete_memory
+    args = context.args
+    if not args or not args[0].isdigit():
+        await update.message.reply_text("Use: /forget <id> — veja os IDs com /memories")
+        return
+    delete_memory(update.effective_user.id, int(args[0]))
+    await update.message.reply_text(f"Memória {args[0]} removida.")
+
+async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Adiciona uma memória manualmente: /remember prefiro reuniões de manhã"""
+    text = " ".join(context.args)
+    if not text:
+        await update.message.reply_text("Use: /remember <fato>")
+        return
+    save_memory(update.effective_user.id, text)
+    await update.message.reply_text("Memorizado!")
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(CommandHandler("clear", cmd_clear))
+    app.add_handler(CommandHandler("memories", cmd_memories))
+    app.add_handler(CommandHandler("forget", cmd_forget))
+    app.add_handler(CommandHandler("remember", cmd_remember))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
