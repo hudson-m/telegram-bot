@@ -18,12 +18,14 @@ from memory import get_memories, get_memories_with_ids, save_memory, clear_memor
 from reminders import is_reminder_sent, mark_reminder_sent
 import anthropic
 from groq import Groq
+from tavily import TavilyClient
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 TIMEZONE = "America/Sao_Paulo"
@@ -43,6 +45,7 @@ credentials = service_account.Credentials.from_service_account_info(
 calendar_service = build("calendar", "v3", credentials=credentials)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
+tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 
 TOOLS = [
     {
@@ -77,6 +80,17 @@ TOOLS = [
                 "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"], "description": "Calendário para buscar (padrão: principal)"}
             },
             "required": ["time_min", "time_max"]
+        }
+    },
+    {
+        "name": "web_search",
+        "description": "Busca informações atuais na web. Use para perguntas sobre notícias, preços, clima, fatos gerais ou qualquer coisa que exija informação atualizada.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "O que buscar"}
+            },
+            "required": ["query"]
         }
     },
     {
@@ -142,6 +156,11 @@ def execute_tool(name: str, inp: dict) -> str:
             for e in result.get("items", [])
         ]
         return json.dumps(events)
+
+    elif name == "web_search":
+        results = tavily_client.search(inp["query"], max_results=5)
+        items = [{"title": r["title"], "url": r["url"], "content": r["content"]} for r in results.get("results", [])]
+        return json.dumps(items, ensure_ascii=False)
 
     elif name == "delete_event":
         cal_id = CALENDARS[inp.get("calendar", "principal")]
