@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import base64
 from datetime import datetime, timedelta, time as dt_time
 from dotenv import load_dotenv
 load_dotenv()
@@ -330,9 +331,13 @@ def _serialize_content(content):
         return content
     return [block.model_dump() if hasattr(block, "model_dump") else block for block in content]
 
-async def process_message(user_id: int, text: str) -> str:
+async def process_message(user_id: int, text: str, media_blocks: list = None) -> str:
     messages = get_history(user_id)
-    messages.append({"role": "user", "content": text})
+    if media_blocks:
+        user_content = media_blocks + [{"type": "text", "text": text or "O que é isso?"}]
+    else:
+        user_content = text
+    messages.append({"role": "user", "content": user_content})
     system_prompt = build_system_prompt(user_id)
 
     while True:
@@ -388,6 +393,58 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = transcription.text
     reply = await process_message(update.effective_user.id, text)
     await update.message.reply_text(f"_{text}_\n\n{reply}", parse_mode="Markdown")
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
+        return
+    await update.message.reply_chat_action("typing")
+    photo = update.message.photo[-1]
+    file = await photo.get_file()
+    img_bytes = await file.download_as_bytearray()
+    media_blocks = [{
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": base64.standard_b64encode(bytes(img_bytes)).decode()
+        }
+    }]
+    caption = update.message.caption or ""
+    reply = await process_message(update.effective_user.id, caption, media_blocks)
+    await update.message.reply_text(reply)
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
+        return
+    doc = update.message.document
+    mime = doc.mime_type or ""
+    if mime not in ("application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"):
+        await update.message.reply_text("Formato não suportado. Manda PDF ou imagem.")
+        return
+    await update.message.reply_chat_action("typing")
+    file = await doc.get_file()
+    file_bytes = await file.download_as_bytearray()
+    if mime == "application/pdf":
+        media_blocks = [{
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": base64.standard_b64encode(bytes(file_bytes)).decode()
+            }
+        }]
+    else:
+        media_blocks = [{
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": mime,
+                "data": base64.standard_b64encode(bytes(file_bytes)).decode()
+            }
+        }]
+    caption = update.message.caption or ""
+    reply = await process_message(update.effective_user.id, caption, media_blocks)
+    await update.message.reply_text(reply)
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Oi! Me diz o que quer agendar ou o que precisa.")
@@ -560,6 +617,8 @@ def main():
     app.add_handler(CommandHandler("notas", cmd_notas))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.job_queue.run_repeating(check_reminders, interval=300, first=30)
     tz = pytz.timezone(TIMEZONE)
     app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
