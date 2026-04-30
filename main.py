@@ -112,6 +112,23 @@ TOOLS = [
         }
     },
     {
+        "name": "update_event",
+        "description": "Atualiza um evento existente no Google Calendar. Use para mudar título, horário, descrição ou local.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string"},
+                "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"]},
+                "summary": {"type": "string", "description": "Novo título (opcional)"},
+                "start_datetime": {"type": "string", "description": "Novo início ISO 8601 (opcional)"},
+                "end_datetime": {"type": "string", "description": "Novo fim ISO 8601 (opcional)"},
+                "description": {"type": "string"},
+                "location": {"type": "string"}
+            },
+            "required": ["event_id", "calendar"]
+        }
+    },
+    {
         "name": "delete_event",
         "description": "Remove um evento do calendário pelo ID",
         "input_schema": {
@@ -194,6 +211,22 @@ def execute_tool(name: str, inp: dict) -> str:
         results = tavily_client.search(inp["query"], max_results=5)
         items = [{"title": r["title"], "url": r["url"], "content": r["content"]} for r in results.get("results", [])]
         return json.dumps(items, ensure_ascii=False)
+
+    elif name == "update_event":
+        cal_id = CALENDARS[inp["calendar"]]
+        event = calendar_service.events().get(calendarId=cal_id, eventId=inp["event_id"]).execute()
+        if inp.get("summary"):
+            event["summary"] = inp["summary"]
+        if inp.get("start_datetime"):
+            event["start"] = {"dateTime": _iso_with_tz(inp["start_datetime"]), "timeZone": TIMEZONE}
+        if inp.get("end_datetime"):
+            event["end"] = {"dateTime": _iso_with_tz(inp["end_datetime"]), "timeZone": TIMEZONE}
+        if inp.get("description") is not None:
+            event["description"] = inp["description"]
+        if inp.get("location") is not None:
+            event["location"] = inp["location"]
+        result = calendar_service.events().update(calendarId=cal_id, eventId=inp["event_id"], body=event).execute()
+        return json.dumps({"success": True, "event_id": result["id"], "summary": result["summary"]})
 
     elif name == "delete_event":
         cal_id = CALENDARS[inp.get("calendar", "principal")]
