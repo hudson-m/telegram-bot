@@ -680,14 +680,17 @@ async def main():
     tg_app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
 
     port = int(os.environ.get("PORT", "8000"))
-    web_server = uvicorn.Server(uvicorn.Config(web_app, host="0.0.0.0", port=port, log_level="warning"))
+    web_server = uvicorn.Server(uvicorn.Config(web_app, host="0.0.0.0", port=port, log_level="info"))
 
-    async with tg_app:
-        await tg_app.updater.start_polling()
-        await tg_app.start()
-        await web_server.serve()
-        await tg_app.updater.stop()
-        await tg_app.stop()
+    async def run_bot():
+        async with tg_app:
+            await tg_app.updater.start_polling()
+            await tg_app.start()
+            await asyncio.Event().wait()
+            await tg_app.updater.stop()
+            await tg_app.stop()
+
+    await asyncio.gather(web_server.serve(), run_bot())
 
 if __name__ == "__main__":
     asyncio.run(main())
