@@ -16,11 +16,13 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 import anthropic
+from groq import Groq
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 TIMEZONE = "America/Sao_Paulo"
@@ -38,6 +40,7 @@ credentials = service_account.Credentials.from_service_account_info(
 )
 calendar_service = build("calendar", "v3", credentials=credentials)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 TOOLS = [
     {
@@ -180,8 +183,8 @@ async def process_message(user_id: int, text: str) -> str:
 
     while True:
         response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=512,
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
             system=system_prompt,
             tools=TOOLS,
             messages=messages
@@ -216,6 +219,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_chat_action("typing")
     reply = await process_message(update.effective_user.id, update.message.text)
     await update.message.reply_text(reply)
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
+        return
+    await update.message.reply_chat_action("typing")
+    voice_file = await update.message.voice.get_file()
+    audio_bytes = await voice_file.download_as_bytearray()
+    transcription = groq_client.audio.transcriptions.create(
+        file=("voice.ogg", bytes(audio_bytes)),
+        model="whisper-large-v3-turbo",
+        language="pt"
+    )
+    text = transcription.text
+    reply = await process_message(update.effective_user.id, text)
+    await update.message.reply_text(f"_{text}_\n\n{reply}", parse_mode="Markdown")
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Oi! Me diz o que quer agendar ou o que precisa.")
@@ -268,6 +286,7 @@ def main():
     app.add_handler(CommandHandler("forget", cmd_forget))
     app.add_handler(CommandHandler("remember", cmd_remember))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.run_polling()
 
 if __name__ == "__main__":
