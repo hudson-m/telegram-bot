@@ -15,7 +15,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
-from reminders import is_reminder_sent, mark_reminder_sent
+from reminders import is_reminder_sent, mark_reminder_sent, block_keyword, unblock_keyword, get_blocked_keywords, is_event_blocked
 import shopping as shopping_db
 import anthropic
 from groq import Groq
@@ -96,6 +96,22 @@ TOOLS = [
                 },
                 "item": {"type": "string", "description": "Nome do item (para add)"},
                 "item_id": {"type": "integer", "description": "ID do item (para remove)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "reminder_filter",
+        "description": "Gerencia quais eventos o Hudson NÃO quer receber lembretes. Use quando ele pedir para ignorar ou voltar a receber lembretes de algo.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["block", "unblock", "list"],
+                    "description": "block: para de mandar lembrete, unblock: volta a mandar, list: mostra o que está bloqueado"
+                },
+                "keyword": {"type": "string", "description": "Palavra-chave do evento (ex: 'academia', 'trabalho')"}
             },
             "required": ["action"]
         }
@@ -206,6 +222,18 @@ def execute_tool(name: str, inp: dict) -> str:
         elif action == "clear":
             shopping_db.clear_list(ALLOWED_USER_ID)
             return json.dumps({"success": True})
+
+    elif name == "reminder_filter":
+        action = inp["action"]
+        if action == "block":
+            block_keyword(ALLOWED_USER_ID, inp["keyword"])
+            return json.dumps({"success": True, "blocked": inp["keyword"]})
+        elif action == "unblock":
+            unblock_keyword(ALLOWED_USER_ID, inp["keyword"])
+            return json.dumps({"success": True, "unblocked": inp["keyword"]})
+        elif action == "list":
+            keywords = get_blocked_keywords(ALLOWED_USER_ID)
+            return json.dumps({"blocked": keywords})
 
     elif name == "web_search":
         results = tavily_client.search(inp["query"], max_results=5)
@@ -401,6 +429,9 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 start_dt = datetime.fromisoformat(start_str)
                 minutes_until = (start_dt - now).total_seconds() / 60
             except Exception:
+                continue
+
+            if is_event_blocked(ALLOWED_USER_ID, event["summary"]):
                 continue
 
             # Lembrete X minutos antes
