@@ -4,6 +4,7 @@ import base64
 import sqlite3
 import time
 import secrets
+import logging
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
@@ -142,6 +143,7 @@ async def register_complete(request: Request):
             expected_origin=WEBAPP_ORIGIN,
         )
     except Exception as e:
+        logging.error(f"WebAuthn error: {e}")
         raise HTTPException(400, str(e))
     with _get_db() as conn:
         conn.execute(
@@ -193,6 +195,7 @@ async def login_complete(request: Request):
             credential_current_sign_count=row[3],
         )
     except Exception as e:
+        logging.error(f"WebAuthn error: {e}")
         raise HTTPException(400, str(e))
     with _get_db() as conn:
         conn.execute("UPDATE webauthn_credentials SET sign_count = ? WHERE id = ?",
