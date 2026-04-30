@@ -56,7 +56,7 @@ async function registerPasskey() {
     if (opts.excludeCredentials) opts.excludeCredentials = opts.excludeCredentials.map(c => ({...c, id: b64ToBuffer(c.id)}));
     const cred = await navigator.credentials.create({publicKey: opts});
     const payload = {
-      id: cred.id, type: cred.type,
+      id: cred.id, rawId: bufferToB64(cred.rawId), type: cred.type,
       response: {
         attestationObject: bufferToB64(cred.response.attestationObject),
         clientDataJSON: bufferToB64(cred.response.clientDataJSON),
@@ -76,7 +76,7 @@ async function loginPasskey() {
     if (opts.allowCredentials) opts.allowCredentials = opts.allowCredentials.map(c => ({...c, id: b64ToBuffer(c.id)}));
     const cred = await navigator.credentials.get({publicKey: opts});
     const payload = {
-      id: cred.id, type: cred.type,
+      id: cred.id, rawId: bufferToB64(cred.rawId), type: cred.type,
       response: {
         authenticatorData: bufferToB64(cred.response.authenticatorData),
         clientDataJSON: bufferToB64(cred.response.clientDataJSON),
