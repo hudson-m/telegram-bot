@@ -3,6 +3,7 @@ import json
 import time
 import os
 import anthropic
+from crypto import encrypt, decrypt
 
 DB_PATH = os.environ.get("DB_PATH", "history.db")
 
@@ -44,14 +45,14 @@ def get_memories(user_id: int) -> list[str]:
             "SELECT content FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
             (user_id,)
         ).fetchall()
-    return [row[0] for row in rows]
+    return [decrypt(row[0]) for row in rows]
 
 
 def save_memory(user_id: int, content: str):
     with _get_db() as conn:
         conn.execute(
             "INSERT INTO memories (user_id, content, created_at) VALUES (?, ?, ?)",
-            (user_id, content.strip(), time.time())
+            (user_id, encrypt(content.strip()), time.time())
         )
 
 
@@ -69,7 +70,7 @@ def get_memories_with_ids(user_id: int) -> list[tuple]:
             "SELECT id, content, created_at FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT 100",
             (user_id,)
         ).fetchall()
-    return rows
+    return [(row[0], decrypt(row[1]), row[2]) for row in rows]
 
 
 def clear_memories(user_id: int):

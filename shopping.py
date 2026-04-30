@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from crypto import encrypt, decrypt
 
 DB_PATH = os.environ.get("DB_PATH", "history.db")
 
@@ -23,7 +24,7 @@ def add_item(user_id: int, item: str):
     with _get_db() as conn:
         conn.execute(
             "INSERT INTO shopping_list (user_id, item, added_at) VALUES (?, ?, ?)",
-            (user_id, item.strip(), time.time())
+            (user_id, encrypt(item.strip()), time.time())
         )
 
 
@@ -33,7 +34,7 @@ def list_items(user_id: int) -> list[tuple]:
             "SELECT id, item FROM shopping_list WHERE user_id = ? ORDER BY added_at",
             (user_id,)
         ).fetchall()
-    return rows
+    return [(row[0], decrypt(row[1])) for row in rows]
 
 
 def remove_item(user_id: int, item_id: int):

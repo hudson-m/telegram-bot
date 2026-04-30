@@ -2,6 +2,7 @@ import sqlite3
 import json
 import time
 import os
+from crypto import encrypt, decrypt
 
 DB_PATH = os.environ.get("DB_PATH", "history.db")
 MAX_MESSAGES = 20
@@ -29,7 +30,7 @@ def get_history(user_id: int) -> list:
     if not row:
         return []
     messages, updated_at = row
-    return json.loads(messages)
+    return json.loads(decrypt(messages))
 
 
 def save_history(user_id: int, messages: list):
@@ -37,7 +38,7 @@ def save_history(user_id: int, messages: list):
     with _get_db() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO conversations (user_id, messages, updated_at) VALUES (?, ?, ?)",
-            (user_id, json.dumps(trimmed), time.time())
+            (user_id, encrypt(json.dumps(trimmed)), time.time())
         )
 
 
