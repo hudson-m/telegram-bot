@@ -351,6 +351,8 @@ Calendários:
 - trabalho: reuniões e compromissos profissionais
 - aulas: cursos, aulas particulares, workshops
 
+Painel web: https://seu-app.up.railway.app — o Hudson pode acessar para ver memórias, notas, lista de compras e custos de API. Mencione quando relevante.
+
 Regras:
 1. Sempre chame get_current_datetime antes de criar ou listar eventos
 2. Interprete linguagem natural: "sexta", "amanhã", "semana que vem às 14h"
