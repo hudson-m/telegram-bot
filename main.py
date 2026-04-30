@@ -382,7 +382,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
         return
     tz = pytz.timezone(TIMEZONE)
     now = datetime.now(tz)
-    window_end = now + timedelta(minutes=REMINDER_MINUTES + 5)
+    window_end = now + timedelta(hours=25)
     for cal_name in CALENDARS:
         try:
             events = json.loads(execute_tool("list_events", {
@@ -402,11 +402,23 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                 minutes_until = (start_dt - now).total_seconds() / 60
             except Exception:
                 continue
-            if minutes_until <= REMINDER_MINUTES and not is_reminder_sent(ALLOWED_USER_ID, event_id):
-                mark_reminder_sent(ALLOWED_USER_ID, event_id)
+
+            # Lembrete X minutos antes
+            if minutes_until <= REMINDER_MINUTES and not is_reminder_sent(ALLOWED_USER_ID, event_id, "soon"):
+                mark_reminder_sent(ALLOWED_USER_ID, event_id, "soon")
                 await context.bot.send_message(
                     chat_id=ALLOWED_USER_ID,
                     text=f"⏰ Daqui {int(minutes_until)} min: *{event['summary']}*",
+                    parse_mode="Markdown"
+                )
+
+            # Lembrete 1 dia antes (entre 23h e 25h de antecedência)
+            elif 23 * 60 <= minutes_until <= 25 * 60 and not is_reminder_sent(ALLOWED_USER_ID, event_id, "day_before"):
+                mark_reminder_sent(ALLOWED_USER_ID, event_id, "day_before")
+                start_fmt = start_dt.strftime("%H:%M")
+                await context.bot.send_message(
+                    chat_id=ALLOWED_USER_ID,
+                    text=f"📅 Amanhã às {start_fmt}: *{event['summary']}*",
                     parse_mode="Markdown"
                 )
 
