@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assistente — Painel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f0f; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  header { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 1.1rem; font-weight: 600; }
+  header a { color: #888; font-size: 0.85rem; text-decoration: none; }
+  header a:hover { color: #ccc; }
+  .tabs { display: flex; padding: 0 24px; border-bottom: 1px solid #2a2a2a; background: #1a1a1a; }
+  .tab { padding: 14px 20px; font-size: 0.9rem; cursor: pointer; color: #888; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .tab.active { color: #4f8ef7; border-bottom-color: #4f8ef7; }
+  .tab:hover:not(.active) { color: #ccc; }
+  .section { display: none; padding: 24px; max-width: 800px; margin: 0 auto; }
+  .section.active { display: block; }
+  .item { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .item-text { flex: 1; font-size: 0.9rem; line-height: 1.5; word-break: break-word; }
+  .item-meta { font-size: 0.75rem; color: #555; margin-top: 4px; }
+  .delete-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 1.1rem; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; transition: color 0.2s; }
+  .delete-btn:hover { color: #f87171; }
+  .empty { color: #555; font-size: 0.9rem; text-align: center; padding: 40px 0; }
+  .clear-btn { background: #2a2a2a; color: #888; border: none; padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; margin-bottom: 16px; }
+  .clear-btn:hover { color: #f87171; }
+  .count { background: #2a2a2a; color: #888; font-size: 0.75rem; padding: 2px 8px; border-radius: 99px; margin-left: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 Assistente</h1>
+  <a href="/logout">Sair</a>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('memories')">
+    Memórias <span class="count">{{ memories|length }}</span>
+  </div>
+  <div class="tab" onclick="showTab('notes')">
+    Notas <span class="count">{{ notes|length }}</span>
+  </div>
+  <div class="tab" onclick="showTab('shopping')">
+    Compras <span class="count">{{ shopping|length }}</span>
+  </div>
+</div>
+
+<div id="tab-memories" class="section active">
+  {% if memories %}
+    {% for mem_id, content, created_at in memories %}
+    <div class="item" id="memory-{{ mem_id }}">
+      <div class="item-text">{{ content }}</div>
+      <button class="delete-btn" onclick="deleteItem('memories', {{ mem_id }})">✕</button>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Nenhuma memória registrada.</div>
+  {% endif %}
+</div>
+
+<div id="tab-notes" class="section">
+  {% if notes %}
+    {% for note_id, content, created_at in notes %}
+    <div class="item" id="note-{{ note_id }}">
+      <div class="item-text">{{ content }}</div>
+      <button class="delete-btn" onclick="deleteItem('notes', {{ note_id }})">✕</button>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Nenhuma nota salva.</div>
+  {% endif %}
+</div>
+
+<div id="tab-shopping" class="section">
+  {% if shopping %}
+    <button class="clear-btn" onclick="clearShopping()">Limpar lista</button>
+    {% for item_id, item_name in shopping %}
+    <div class="item" id="shopping-{{ item_id }}">
+      <div class="item-text">{{ item_name }}</div>
+      <button class="delete-btn" onclick="deleteItem('shopping', {{ item_id }})">✕</button>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">Lista de compras vazia.</div>
+  {% endif %}
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['memories','notes','shopping'][i] === name));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+async function deleteItem(type, id) {
+  const res = await fetch(`/api/${type}/${id}`, {method: 'DELETE'});
+  if (res.ok) {
+    const el = document.getElementById(`${type.slice(0,-1)}-${id}`) || document.getElementById(`${type}-${id}`);
+    if (el) el.remove();
+  }
+}
+
+async function clearShopping() {
+  const res = await fetch('/api/shopping', {method: 'DELETE'});
+  if (res.ok) window.location.reload();
+}
+</script>
+</body>
+</html>

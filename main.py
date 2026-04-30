@@ -657,25 +657,37 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
         text="\n".join(lines)
     )
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("myid", cmd_myid))
-    app.add_handler(CommandHandler("clear", cmd_clear))
-    app.add_handler(CommandHandler("memories", cmd_memories))
-    app.add_handler(CommandHandler("forget", cmd_forget))
-    app.add_handler(CommandHandler("remember", cmd_remember))
-    app.add_handler(CommandHandler("compras", cmd_compras))
-    app.add_handler(CommandHandler("notas", cmd_notas))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.job_queue.run_repeating(check_reminders, interval=300, first=30)
+async def main():
+    import uvicorn
+    from web import app as web_app
+
+    tg_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    tg_app.add_handler(CommandHandler("start", cmd_start))
+    tg_app.add_handler(CommandHandler("myid", cmd_myid))
+    tg_app.add_handler(CommandHandler("clear", cmd_clear))
+    tg_app.add_handler(CommandHandler("memories", cmd_memories))
+    tg_app.add_handler(CommandHandler("forget", cmd_forget))
+    tg_app.add_handler(CommandHandler("remember", cmd_remember))
+    tg_app.add_handler(CommandHandler("compras", cmd_compras))
+    tg_app.add_handler(CommandHandler("notas", cmd_notas))
+    tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    tg_app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    tg_app.add_handler(MessageHandler(filters.LOCATION, handle_location))
+    tg_app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    tg_app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    tg_app.job_queue.run_repeating(check_reminders, interval=300, first=30)
     tz = pytz.timezone(TIMEZONE)
-    app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
-    app.run_polling()
+    tg_app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
+
+    port = int(os.environ.get("PORT", "8000"))
+    web_server = uvicorn.Server(uvicorn.Config(web_app, host="0.0.0.0", port=port, log_level="warning"))
+
+    async with tg_app:
+        await tg_app.updater.start_polling()
+        await tg_app.start()
+        await web_server.serve()
+        await tg_app.updater.stop()
+        await tg_app.stop()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
