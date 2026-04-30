@@ -23,6 +23,7 @@ from webauthn.helpers.cose import COSEAlgorithmIdentifier
 from memory import get_memories_with_ids, delete_memory
 from notes import list_notes, delete_note
 from shopping import list_items, remove_item, clear_list
+from usage import get_daily_usage, get_totals
 
 WEBAPP_DOMAIN = os.environ.get("WEBAPP_DOMAIN", "localhost")
 WEBAPP_ORIGIN = os.environ.get("WEBAPP_ORIGIN", f"http://localhost:8000")
@@ -79,11 +80,15 @@ async def index(request: Request):
     memories = get_memories_with_ids(user_id)
     notes = list_notes(user_id)
     shopping = list_items(user_id)
+    totals = get_totals()
+    daily = get_daily_usage(30)
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "memories": memories,
         "notes": notes,
         "shopping": shopping,
+        "totals": totals,
+        "daily": daily,
     })
 
 

@@ -35,15 +35,10 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" onclick="showTab('memories')">
-    Memórias <span class="count">{{ memories|length }}</span>
-  </div>
-  <div class="tab" onclick="showTab('notes')">
-    Notas <span class="count">{{ notes|length }}</span>
-  </div>
-  <div class="tab" onclick="showTab('shopping')">
-    Compras <span class="count">{{ shopping|length }}</span>
-  </div>
+  <div class="tab active" onclick="showTab('memories')">Memórias <span class="count">{{ memories|length }}</span></div>
+  <div class="tab" onclick="showTab('notes')">Notas <span class="count">{{ notes|length }}</span></div>
+  <div class="tab" onclick="showTab('shopping')">Compras <span class="count">{{ shopping|length }}</span></div>
+  <div class="tab" onclick="showTab('costs')">Custos</div>
 </div>
 
 <div id="tab-memories" class="section active">
@@ -86,9 +81,49 @@
   {% endif %}
 </div>
 
+<div id="tab-costs" class="section">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">
+    {% for label, key in [('Hoje','today'),('7 dias','week'),('30 dias','month'),('Total','all_time')] %}
+    <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:16px;text-align:center">
+      <div style="font-size:0.75rem;color:#888;margin-bottom:6px">{{ label }}</div>
+      <div style="font-size:1.3rem;font-weight:600;color:#4f8ef7">${{ totals[key].cost_usd }}</div>
+      <div style="font-size:0.7rem;color:#555;margin-top:4px">{{ totals[key].input_tokens + totals[key].output_tokens }} tokens</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:20px">
+    <div style="font-size:0.85rem;color:#888;margin-bottom:16px">Custo diário — últimos 30 dias (USD)</div>
+    <canvas id="costChart" height="100"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+const dailyData = {{ daily | tojson }};
+
+new Chart(document.getElementById('costChart'), {
+  type: 'bar',
+  data: {
+    labels: dailyData.map(d => d.day),
+    datasets: [{
+      data: dailyData.map(d => d.cost_usd),
+      backgroundColor: '#4f8ef7aa',
+      borderColor: '#4f8ef7',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#666', maxTicksLimit: 10 }, grid: { color: '#1f1f1f' } },
+      y: { ticks: { color: '#666', callback: v => '$' + v.toFixed(4) }, grid: { color: '#1f1f1f' } }
+    }
+  }
+});
+
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['memories','notes','shopping'][i] === name));
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['memories','notes','shopping','costs'][i] === name));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
 }

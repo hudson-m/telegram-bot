@@ -19,6 +19,7 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 from reminders import is_reminder_sent, mark_reminder_sent, block_keyword, unblock_keyword, get_blocked_keywords, is_event_blocked
+from usage import log_usage
 import shopping as shopping_db
 import notes as notes_db
 import anthropic
@@ -391,6 +392,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             tools=TOOLS,
             messages=messages
         )
+        log_usage("claude-sonnet-4-6", response.usage.input_tokens, response.usage.output_tokens)
         if response.stop_reason == "end_turn":
             serialized = _serialize_content(response.content)
             messages.append({"role": "assistant", "content": serialized})
