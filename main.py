@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -377,6 +377,59 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="Markdown"
                 )
 
+WEEKDAYS_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
+async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
+    if not ALLOWED_USER_ID:
+        return
+    tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(tz)
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    all_events = []
+    for cal_name in CALENDARS:
+        try:
+            events = json.loads(execute_tool("list_events", {
+                "time_min": start_of_day.isoformat(),
+                "time_max": end_of_day.isoformat(),
+                "calendar": cal_name
+            }))
+            for e in events:
+                e["calendar"] = cal_name
+            all_events.extend(events)
+        except Exception:
+            continue
+
+    all_events.sort(key=lambda e: e["start"])
+    weekday = WEEKDAYS_PT[now.weekday()]
+    date_str = f"{weekday}, {now.strftime('%d/%m')}"
+
+    if not all_events:
+        await context.bot.send_message(
+            chat_id=ALLOWED_USER_ID,
+            text=f"Bom dia! Agenda de hoje ({date_str}) está livre."
+        )
+        return
+
+    lines = [f"Bom dia! Agenda de hoje — {date_str}:\n"]
+    for e in all_events:
+        start_str = e["start"]
+        if "T" in start_str:
+            try:
+                dt = datetime.fromisoformat(start_str)
+                time_str = dt.strftime("%H:%M")
+            except Exception:
+                time_str = "?"
+        else:
+            time_str = "dia todo"
+        lines.append(f"• {time_str} — {e['summary']}")
+
+    await context.bot.send_message(
+        chat_id=ALLOWED_USER_ID,
+        text="\n".join(lines)
+    )
+
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
@@ -389,6 +442,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.job_queue.run_repeating(check_reminders, interval=300, first=30)
+    tz = pytz.timezone(TIMEZONE)
+    app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
     app.run_polling()
 
 if __name__ == "__main__":
