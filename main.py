@@ -3,6 +3,8 @@ import json
 import asyncio
 import logging
 import base64
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, time as dt_time
 from dotenv import load_dotenv
 load_dotenv()
@@ -29,6 +31,7 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]
+GOOGLE_MAPS_API_KEY = os.environ["GOOGLE_MAPS_API_KEY"]
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 TIMEZONE = "America/Sao_Paulo"
@@ -118,6 +121,20 @@ TOOLS = [
                 "note_id": {"type": "integer", "description": "ID da nota (para delete)"}
             },
             "required": ["action"]
+        }
+    },
+    {
+        "name": "nearby_places",
+        "description": "Busca lugares próximos a uma localização. Use quando o Hudson perguntar o que tem perto dele ou quiser achar um lugar específico na região.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "latitude": {"type": "number"},
+                "longitude": {"type": "number"},
+                "query": {"type": "string", "description": "O que buscar, ex: 'café', 'farmácia', 'restaurante japonês'"},
+                "radius": {"type": "integer", "description": "Raio em metros (padrão: 1000)"}
+            },
+            "required": ["latitude", "longitude", "query"]
         }
     },
     {
@@ -258,6 +275,32 @@ def execute_tool(name: str, inp: dict) -> str:
             notes_db.delete_note(ALLOWED_USER_ID, inp["note_id"])
             return json.dumps({"success": True})
 
+    elif name == "nearby_places":
+        lat = inp["latitude"]
+        lng = inp["longitude"]
+        query = inp["query"]
+        radius = inp.get("radius", 1000)
+        params = urllib.parse.urlencode({
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "keyword": query,
+            "language": "pt-BR",
+            "key": GOOGLE_MAPS_API_KEY
+        })
+        url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?{params}"
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read())
+        places = [
+            {
+                "name": p["name"],
+                "address": p.get("vicinity", ""),
+                "rating": p.get("rating", ""),
+                "open_now": p.get("opening_hours", {}).get("open_now", None)
+            }
+            for p in data.get("results", [])[:6]
+        ]
+        return json.dumps(places, ensure_ascii=False)
+
     elif name == "reminder_filter":
         action = inp["action"]
         if action == "block":
@@ -393,6 +436,15 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = transcription.text
     reply = await process_message(update.effective_user.id, text)
     await update.message.reply_text(f"_{text}_\n\n{reply}", parse_mode="Markdown")
+
+async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
+        return
+    await update.message.reply_chat_action("typing")
+    loc = update.message.location
+    text = f"Minha localização atual: latitude {loc.latitude}, longitude {loc.longitude}"
+    reply = await process_message(update.effective_user.id, text)
+    await update.message.reply_text(reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
@@ -617,6 +669,7 @@ def main():
     app.add_handler(CommandHandler("notas", cmd_notas))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.add_handler(MessageHandler(filters.LOCATION, handle_location))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.job_queue.run_repeating(check_reminders, interval=300, first=30)
