@@ -17,6 +17,7 @@ from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 from reminders import is_reminder_sent, mark_reminder_sent, block_keyword, unblock_keyword, get_blocked_keywords, is_event_blocked
 import shopping as shopping_db
+import notes as notes_db
 import anthropic
 from groq import Groq
 from tavily import TavilyClient
@@ -96,6 +97,24 @@ TOOLS = [
                 },
                 "item": {"type": "string", "description": "Nome do item (para add)"},
                 "item_id": {"type": "integer", "description": "ID do item (para remove)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "notes",
+        "description": "Bloco de notas do Hudson. Use para salvar informações avulsas que ele quer recuperar depois (senhas, ideias, lembretes sem data, etc), buscar notas antigas ou apagar uma nota.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "search", "list", "delete"],
+                    "description": "add: salva nota, search: busca por palavra-chave, list: lista recentes, delete: apaga pelo id"
+                },
+                "content": {"type": "string", "description": "Conteúdo da nota (para add)"},
+                "query": {"type": "string", "description": "Palavra-chave para buscar (para search)"},
+                "note_id": {"type": "integer", "description": "ID da nota (para delete)"}
             },
             "required": ["action"]
         }
@@ -221,6 +240,21 @@ def execute_tool(name: str, inp: dict) -> str:
             return json.dumps({"success": True})
         elif action == "clear":
             shopping_db.clear_list(ALLOWED_USER_ID)
+            return json.dumps({"success": True})
+
+    elif name == "notes":
+        action = inp["action"]
+        if action == "add":
+            note_id = notes_db.add_note(ALLOWED_USER_ID, inp["content"])
+            return json.dumps({"success": True, "id": note_id})
+        elif action == "search":
+            rows = notes_db.search_notes(ALLOWED_USER_ID, inp["query"])
+            return json.dumps([{"id": i, "content": c, "created_at": t} for i, c, t in rows])
+        elif action == "list":
+            rows = notes_db.list_notes(ALLOWED_USER_ID)
+            return json.dumps([{"id": i, "content": c, "created_at": t} for i, c, t in rows])
+        elif action == "delete":
+            notes_db.delete_note(ALLOWED_USER_ID, inp["note_id"])
             return json.dumps({"success": True})
 
     elif name == "reminder_filter":
@@ -396,6 +430,14 @@ async def cmd_compras(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [f"{i}. {name}" for i, name in items]
     await update.message.reply_text("🛒 Lista de compras:\n" + "\n".join(lines))
 
+async def cmd_notas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rows = notes_db.list_notes(update.effective_user.id)
+    if not rows:
+        await update.message.reply_text("Nenhuma nota salva ainda.")
+        return
+    lines = [f"[{i}] {c}" for i, c, _ in rows]
+    await update.message.reply_text("\n".join(lines))
+
 async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Adiciona uma memória manualmente: /remember prefiro reuniões de manhã"""
     text = " ".join(context.args)
@@ -515,6 +557,7 @@ def main():
     app.add_handler(CommandHandler("forget", cmd_forget))
     app.add_handler(CommandHandler("remember", cmd_remember))
     app.add_handler(CommandHandler("compras", cmd_compras))
+    app.add_handler(CommandHandler("notas", cmd_notas))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.job_queue.run_repeating(check_reminders, interval=300, first=30)
