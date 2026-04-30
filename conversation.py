@@ -4,8 +4,7 @@ import time
 import os
 
 DB_PATH = os.environ.get("DB_PATH", "history.db")
-SESSION_TIMEOUT = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30")) * 60
-MAX_MESSAGES = 20  # mantém as últimas 20 mensagens para não estourar o contexto
+MAX_MESSAGES = 20
 
 
 def _get_db() -> sqlite3.Connection:
@@ -30,9 +29,6 @@ def get_history(user_id: int) -> list:
     if not row:
         return []
     messages, updated_at = row
-    if time.time() - updated_at > SESSION_TIMEOUT:
-        clear_history(user_id)
-        return []
     return json.loads(messages)
 
 
