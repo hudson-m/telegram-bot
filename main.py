@@ -176,6 +176,11 @@ def build_system_prompt(user_id: int) -> str:
         memories_text = "Nenhuma memória registrada ainda."
     return BASE_SYSTEM_PROMPT.format(memories_section=memories_text)
 
+def _serialize_content(content):
+    if not isinstance(content, list):
+        return content
+    return [block.model_dump() if hasattr(block, "model_dump") else block for block in content]
+
 async def process_message(user_id: int, text: str) -> str:
     messages = get_history(user_id)
     messages.append({"role": "user", "content": text})
@@ -190,9 +195,9 @@ async def process_message(user_id: int, text: str) -> str:
             messages=messages
         )
         if response.stop_reason == "end_turn":
-            messages.append({"role": "assistant", "content": response.content})
+            serialized = _serialize_content(response.content)
+            messages.append({"role": "assistant", "content": serialized})
             save_history(user_id, messages)
-            # Extrai memórias em background sem bloquear a resposta
             asyncio.get_event_loop().run_in_executor(None, extract_and_save, user_id, messages)
             for block in response.content:
                 if hasattr(block, "text"):
@@ -208,7 +213,7 @@ async def process_message(user_id: int, text: str) -> str:
                         "tool_use_id": block.id,
                         "content": result
                     })
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": _serialize_content(response.content)})
             messages.append({"role": "user", "content": tool_results})
         else:
             return "Algo deu errado, tente novamente."
