@@ -16,6 +16,7 @@ from telegram.ext import Application, MessageHandler, CommandHandler, filters, C
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 from reminders import is_reminder_sent, mark_reminder_sent
+import shopping as shopping_db
 import anthropic
 from groq import Groq
 from tavily import TavilyClient
@@ -80,6 +81,23 @@ TOOLS = [
                 "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"], "description": "Calendário para buscar (padrão: principal)"}
             },
             "required": ["time_min", "time_max"]
+        }
+    },
+    {
+        "name": "shopping_list",
+        "description": "Gerencia a lista de compras do Hudson. Use para adicionar itens, listar o que tem na lista, remover um item ou limpar tudo.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["add", "list", "remove", "clear"],
+                    "description": "Ação a executar"
+                },
+                "item": {"type": "string", "description": "Nome do item (para add)"},
+                "item_id": {"type": "integer", "description": "ID do item (para remove)"}
+            },
+            "required": ["action"]
         }
     },
     {
@@ -156,6 +174,21 @@ def execute_tool(name: str, inp: dict) -> str:
             for e in result.get("items", [])
         ]
         return json.dumps(events)
+
+    elif name == "shopping_list":
+        action = inp["action"]
+        if action == "add":
+            shopping_db.add_item(ALLOWED_USER_ID, inp["item"])
+            return json.dumps({"success": True, "item": inp["item"]})
+        elif action == "list":
+            items = shopping_db.list_items(ALLOWED_USER_ID)
+            return json.dumps([{"id": i, "item": name} for i, name in items])
+        elif action == "remove":
+            shopping_db.remove_item(ALLOWED_USER_ID, inp["item_id"])
+            return json.dumps({"success": True})
+        elif action == "clear":
+            shopping_db.clear_list(ALLOWED_USER_ID)
+            return json.dumps({"success": True})
 
     elif name == "web_search":
         results = tavily_client.search(inp["query"], max_results=5)
@@ -294,6 +327,14 @@ async def cmd_forget(update: Update, context: ContextTypes.DEFAULT_TYPE):
     delete_memory(update.effective_user.id, int(args[0]))
     await update.message.reply_text(f"Memória {args[0]} removida.")
 
+async def cmd_compras(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    items = shopping_db.list_items(update.effective_user.id)
+    if not items:
+        await update.message.reply_text("Lista de compras vazia.")
+        return
+    lines = [f"{i}. {name}" for i, name in items]
+    await update.message.reply_text("🛒 Lista de compras:\n" + "\n".join(lines))
+
 async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Adiciona uma memória manualmente: /remember prefiro reuniões de manhã"""
     text = " ".join(context.args)
@@ -344,6 +385,7 @@ def main():
     app.add_handler(CommandHandler("memories", cmd_memories))
     app.add_handler(CommandHandler("forget", cmd_forget))
     app.add_handler(CommandHandler("remember", cmd_remember))
+    app.add_handler(CommandHandler("compras", cmd_compras))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.job_queue.run_repeating(check_reminders, interval=300, first=30)
