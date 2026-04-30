@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -15,6 +15,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
+from reminders import is_reminder_sent, mark_reminder_sent
 import anthropic
 from groq import Groq
 from google.oauth2 import service_account
@@ -26,6 +27,7 @@ GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 TIMEZONE = "America/Sao_Paulo"
+REMINDER_MINUTES = int(os.environ.get("REMINDER_MINUTES", "30"))
 
 CALENDARS = {
     "principal": "seu_email@gmail.com",
@@ -282,6 +284,39 @@ async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_memory(update.effective_user.id, text)
     await update.message.reply_text("Memorizado!")
 
+async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
+    if not ALLOWED_USER_ID:
+        return
+    tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(tz)
+    window_end = now + timedelta(minutes=REMINDER_MINUTES + 5)
+    for cal_name in CALENDARS:
+        try:
+            events = json.loads(execute_tool("list_events", {
+                "time_min": now.isoformat(),
+                "time_max": window_end.isoformat(),
+                "calendar": cal_name
+            }))
+        except Exception:
+            continue
+        for event in events:
+            event_id = event["id"]
+            start_str = event["start"]
+            if "T" not in start_str:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(start_str)
+                minutes_until = (start_dt - now).total_seconds() / 60
+            except Exception:
+                continue
+            if minutes_until <= REMINDER_MINUTES and not is_reminder_sent(ALLOWED_USER_ID, event_id):
+                mark_reminder_sent(ALLOWED_USER_ID, event_id)
+                await context.bot.send_message(
+                    chat_id=ALLOWED_USER_ID,
+                    text=f"⏰ Daqui {int(minutes_until)} min: *{event['summary']}*",
+                    parse_mode="Markdown"
+                )
+
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
@@ -292,6 +327,7 @@ def main():
     app.add_handler(CommandHandler("remember", cmd_remember))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.job_queue.run_repeating(check_reminders, interval=300, first=30)
     app.run_polling()
 
 if __name__ == "__main__":
