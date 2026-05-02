@@ -692,6 +692,13 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
         text="\n".join(lines)
     )
 
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logging.error("Unhandled exception", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        await update.effective_message.reply_text(
+            "Ah num sei, deu ruim aqui 😅 Tenta de novo."
+        )
+
 async def main():
     import uvicorn
     from web import app as web_app
@@ -706,6 +713,7 @@ async def main():
     tg_app.add_handler(CommandHandler("compras", cmd_compras))
     tg_app.add_handler(CommandHandler("notas", cmd_notas))
     tg_app.add_handler(CommandHandler("painel", cmd_painel))
+    tg_app.add_error_handler(handle_error)
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     tg_app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     tg_app.add_handler(MessageHandler(filters.LOCATION, handle_location))
