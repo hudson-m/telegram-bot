@@ -16,6 +16,7 @@ logging.basicConfig(
 import pytz
 from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram.helpers import escape_markdown
 from conversation import get_history, save_history, clear_history
 from memory import get_memories, get_memories_with_ids, save_memory, clear_memories, extract_and_save
 from reminders import is_reminder_sent, mark_reminder_sent, block_keyword, unblock_keyword, get_blocked_keywords, is_event_blocked
@@ -457,7 +458,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     text = _reply_prefix(update.message) + transcription.text
     reply = await process_message(update.effective_user.id, text)
-    await update.message.reply_text(f"_{transcription.text}_\n\n{reply}", parse_mode="Markdown")
+    safe_transcription = escape_markdown(transcription.text, version=1)
+    await update.message.reply_text(f"_{safe_transcription}_\n\n{reply}", parse_mode="Markdown")
 
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
