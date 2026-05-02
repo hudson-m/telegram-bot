@@ -355,7 +355,7 @@ Calendários:
 Painel web: https://seu-app.up.railway.app — o Hudson pode acessar para ver memórias, notas, lista de compras e custos de API. Mencione quando relevante.
 
 Regras:
-1. Sempre chame get_current_datetime antes de criar ou listar eventos
+1. Sempre chame get_current_datetime quando precisar saber a data/hora atual — inclusive para responder perguntas sobre dia, hora ou data, não só para criar eventos
 2. Interprete linguagem natural: "sexta", "amanhã", "semana que vem às 14h"
 3. Se não souber o horário de fim, assuma 1 hora de duração
 4. Escolha o calendário certo conforme o tipo do evento
