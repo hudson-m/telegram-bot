@@ -31,10 +31,13 @@
     <a id="safari-link" href="">Toque aqui para abrir no Safari</a>
   </div>
 
-  {% if has_credential %}
+  {% if has_credential and not setup_mode %}
   <button class="btn-primary" onclick="loginPasskey()">🔐 Entrar com Passkey</button>
   {% else %}
   <button class="btn-primary" onclick="registerPasskey()">🔑 Cadastrar Passkey</button>
+  {% if has_credential %}
+  <button class="btn-secondary" onclick="loginPasskey()">Já tenho Passkey — Entrar</button>
+  {% endif %}
   {% endif %}
 
   <div class="error" id="error"></div>
@@ -70,9 +73,12 @@ function isInAppBrowser() {
   }
 })();
 
+const SETUP_TOKEN = "{{ setup_token }}";
+
 async function registerPasskey() {
   try {
-    const r = await fetch('/auth/register/begin', {method: 'POST'});
+    const url = '/auth/register/begin' + (SETUP_TOKEN ? `?token=${encodeURIComponent(SETUP_TOKEN)}` : '');
+    const r = await fetch(url, {method: 'POST'});
     const opts = await r.json();
     opts.challenge = b64ToBuffer(opts.challenge);
     opts.user.id = b64ToBuffer(opts.user.id);

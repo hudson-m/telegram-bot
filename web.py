@@ -30,6 +30,7 @@ WEBAPP_ORIGIN = os.environ.get("WEBAPP_ORIGIN", f"http://localhost:8000")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 DB_PATH = os.environ.get("DB_PATH", "history.db")
+SETUP_TOKEN = os.environ.get("SETUP_TOKEN", "")
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -98,9 +99,13 @@ async def login_page(request: Request):
         return RedirectResponse("/")
     with _get_db() as conn:
         has_credential = conn.execute("SELECT 1 FROM webauthn_credentials LIMIT 1").fetchone() is not None
+    token = request.query_params.get("token", "")
+    setup_mode = bool(SETUP_TOKEN and secrets.compare_digest(token, SETUP_TOKEN))
     return templates.TemplateResponse("login.html", {
         "request": request,
         "has_credential": has_credential,
+        "setup_mode": setup_mode,
+        "setup_token": token if setup_mode else "",
     })
 
 
@@ -116,7 +121,9 @@ async def register_begin(request: Request):
     user_id = get_session_user(request)
     with _get_db() as conn:
         has_credential = conn.execute("SELECT 1 FROM webauthn_credentials LIMIT 1").fetchone() is not None
-    if has_credential and not user_id:
+    token = request.query_params.get("token", "")
+    token_ok = SETUP_TOKEN and secrets.compare_digest(token, SETUP_TOKEN)
+    if has_credential and not user_id and not token_ok:
         raise HTTPException(403, "Já registrado")
     options = webauthn.generate_registration_options(
         rp_id=WEBAPP_DOMAIN,
