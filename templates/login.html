@@ -16,8 +16,9 @@
   .btn-secondary { background: #2a2a2a; color: #ccc; margin-top: 12px; }
   .error { color: #f87171; font-size: 0.85rem; margin-top: 16px; display: none; }
   .icon { font-size: 2.5rem; margin-bottom: 16px; }
-  .inapp-banner { background: #2a1a00; border: 1px solid #7a4400; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: 0.85rem; color: #ffb347; display: none; line-height: 1.5; }
-  .inapp-banner a { color: #4f8ef7; text-decoration: underline; }
+  .hint { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: 0.85rem; color: #aaaacc; display: none; line-height: 1.6; }
+  .hint a { color: #4f8ef7; text-decoration: underline; }
+  .hint code { background: #111; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #00d4ff; }
 </style>
 </head>
 <body>
@@ -26,9 +27,15 @@
   <h1>Assistente Pessoal</h1>
   <p>{% if has_credential %}Autentique com seu Passkey para continuar.{% else %}Configure seu Passkey para acessar o painel.{% endif %}</p>
 
-  <div class="inapp-banner" id="inapp-banner">
-    Passkeys não funcionam em browsers internos de apps.<br>
-    <a id="safari-link" href="">Toque aqui para abrir no Safari</a>
+  <div class="hint" id="hint">
+    <span id="hint-inapp">
+      Passkeys não funcionam em browsers internos de apps.<br>
+      <a id="safari-link" href="">Toque aqui para abrir no Safari</a>
+    </span>
+    <span id="hint-nokey" style="display:none">
+      Nenhum passkey registrado neste dispositivo.<br>
+      Mande <code>/painel</code> no bot para receber um link de registro.
+    </span>
   </div>
 
   {% if has_credential and not setup_mode %}
@@ -59,18 +66,23 @@ function showError(msg) {
 
 function isInAppBrowser() {
   const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/.test(ua);
-  // Real Safari includes "Safari/" in the UA; in-app WKWebViews don't
-  return isIOS && !/Safari\//.test(ua);
+  return /iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua);
+}
+
+function showHint(type) {
+  document.getElementById('hint').style.display = 'block';
+  if (type === 'inapp') {
+    document.getElementById('hint-inapp').style.display = '';
+    document.getElementById('hint-nokey').style.display = 'none';
+    document.getElementById('safari-link').href = window.location.href;
+  } else {
+    document.getElementById('hint-inapp').style.display = 'none';
+    document.getElementById('hint-nokey').style.display = '';
+  }
 }
 
 (function() {
-  if (isInAppBrowser()) {
-    const banner = document.getElementById('inapp-banner');
-    const link = document.getElementById('safari-link');
-    link.href = window.location.href;
-    banner.style.display = 'block';
-  }
+  if (isInAppBrowser()) showHint('inapp');
 })();
 
 const SETUP_TOKEN = "{{ setup_token }}";
@@ -95,12 +107,8 @@ async function registerPasskey() {
     if (res.ok) window.location = '/';
     else showError('Erro ao cadastrar. Tente novamente.');
   } catch(e) {
-    if (e.name === 'NotAllowedError') {
-      document.getElementById('inapp-banner').style.display = 'block';
-      document.getElementById('safari-link').href = window.location.href;
-    } else {
-      showError(e.message);
-    }
+    if (e.name === 'NotAllowedError') showHint(isInAppBrowser() ? 'inapp' : 'nokey');
+    else showError(e.message);
   }
 }
 
@@ -124,12 +132,8 @@ async function loginPasskey() {
     if (res.ok) window.location = '/';
     else showError('Autenticação falhou. Tente novamente.');
   } catch(e) {
-    if (e.name === 'NotAllowedError') {
-      document.getElementById('inapp-banner').style.display = 'block';
-      document.getElementById('safari-link').href = window.location.href;
-    } else {
-      showError(e.message);
-    }
+    if (e.name === 'NotAllowedError') showHint(isInAppBrowser() ? 'inapp' : 'nokey');
+    else showError(e.message);
   }
 }
 </script>
