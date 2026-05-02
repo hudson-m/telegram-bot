@@ -419,11 +419,29 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
         else:
             return "Algo deu errado, tente novamente."
 
+def _reply_prefix(message) -> str:
+    replied = message.reply_to_message
+    if not replied:
+        return ""
+    if replied.text:
+        snippet = replied.text[:300]
+        return f"[Em resposta a: \"{snippet}\"]\n\n"
+    if replied.caption:
+        snippet = replied.caption[:300]
+        return f"[Em resposta a legenda: \"{snippet}\"]\n\n"
+    if replied.voice or replied.audio:
+        return "[Em resposta a uma mensagem de voz]\n\n"
+    if replied.photo:
+        return "[Em resposta a uma foto]\n\n"
+    return "[Em resposta a uma mensagem]\n\n"
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
         return
     await update.message.reply_chat_action("typing")
-    reply = await process_message(update.effective_user.id, update.message.text)
+    text = _reply_prefix(update.message) + (update.message.text or "")
+    reply = await process_message(update.effective_user.id, text)
     await update.message.reply_text(reply)
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -437,9 +455,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         model="whisper-large-v3-turbo",
         language="pt"
     )
-    text = transcription.text
+    text = _reply_prefix(update.message) + transcription.text
     reply = await process_message(update.effective_user.id, text)
-    await update.message.reply_text(f"_{text}_\n\n{reply}", parse_mode="Markdown")
+    await update.message.reply_text(f"_{transcription.text}_\n\n{reply}", parse_mode="Markdown")
 
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
