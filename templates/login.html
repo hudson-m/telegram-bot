@@ -16,6 +16,8 @@
   .btn-secondary { background: #2a2a2a; color: #ccc; margin-top: 12px; }
   .error { color: #f87171; font-size: 0.85rem; margin-top: 16px; display: none; }
   .icon { font-size: 2.5rem; margin-bottom: 16px; }
+  .inapp-banner { background: #2a1a00; border: 1px solid #7a4400; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: 0.85rem; color: #ffb347; display: none; line-height: 1.5; }
+  .inapp-banner a { color: #4f8ef7; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -23,6 +25,11 @@
   <div class="icon">🤖</div>
   <h1>Assistente Pessoal</h1>
   <p>{% if has_credential %}Autentique com seu Passkey para continuar.{% else %}Configure seu Passkey para acessar o painel.{% endif %}</p>
+
+  <div class="inapp-banner" id="inapp-banner">
+    Passkeys não funcionam em browsers internos de apps.<br>
+    <a id="safari-link" href="">Toque aqui para abrir no Safari</a>
+  </div>
 
   {% if has_credential %}
   <button class="btn-primary" onclick="loginPasskey()">🔐 Entrar com Passkey</button>
@@ -47,6 +54,22 @@ function showError(msg) {
   el.style.display = 'block';
 }
 
+function isInAppBrowser() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  // Real Safari includes "Safari/" in the UA; in-app WKWebViews don't
+  return isIOS && !/Safari\//.test(ua);
+}
+
+(function() {
+  if (isInAppBrowser()) {
+    const banner = document.getElementById('inapp-banner');
+    const link = document.getElementById('safari-link');
+    link.href = window.location.href;
+    banner.style.display = 'block';
+  }
+})();
+
 async function registerPasskey() {
   try {
     const r = await fetch('/auth/register/begin', {method: 'POST'});
@@ -65,7 +88,14 @@ async function registerPasskey() {
     const res = await fetch('/auth/register/complete', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
     if (res.ok) window.location = '/';
     else showError('Erro ao cadastrar. Tente novamente.');
-  } catch(e) { showError(e.message); }
+  } catch(e) {
+    if (e.name === 'NotAllowedError') {
+      document.getElementById('inapp-banner').style.display = 'block';
+      document.getElementById('safari-link').href = window.location.href;
+    } else {
+      showError(e.message);
+    }
+  }
 }
 
 async function loginPasskey() {
@@ -87,7 +117,14 @@ async function loginPasskey() {
     const res = await fetch('/auth/login/complete', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
     if (res.ok) window.location = '/';
     else showError('Autenticação falhou. Tente novamente.');
-  } catch(e) { showError(e.message); }
+  } catch(e) {
+    if (e.name === 'NotAllowedError') {
+      document.getElementById('inapp-banner').style.display = 'block';
+      document.getElementById('safari-link').href = window.location.href;
+    } else {
+      showError(e.message);
+    }
+  }
 }
 </script>
 </body>
