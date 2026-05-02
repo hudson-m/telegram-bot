@@ -578,8 +578,7 @@ async def cmd_painel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     token = generate_setup_token()
     url = f"{WEBAPP_ORIGIN}/login?token={token}"
     await update.message.reply_text(
-        f"🔐 Link do painel \\(válido por 5 min\\):\n{url}",
-        parse_mode="MarkdownV2",
+        f"🔐 Link do painel (válido por 5 min):\n{url}",
         disable_web_page_preview=True
     )
 
