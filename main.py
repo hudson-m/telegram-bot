@@ -571,6 +571,18 @@ async def cmd_notas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [f"[{i}] {c}" for i, c, _ in rows]
     await update.message.reply_text("\n".join(lines))
 
+async def cmd_painel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
+        return
+    from web import generate_setup_token, WEBAPP_ORIGIN
+    token = generate_setup_token()
+    url = f"{WEBAPP_ORIGIN}/login?token={token}"
+    await update.message.reply_text(
+        f"🔐 Link do painel \\(válido por 5 min\\):\n{url}",
+        parse_mode="MarkdownV2",
+        disable_web_page_preview=True
+    )
+
 async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Adiciona uma memória manualmente: /remember prefiro reuniões de manhã"""
     text = " ".join(context.args)
@@ -694,6 +706,7 @@ async def main():
     tg_app.add_handler(CommandHandler("remember", cmd_remember))
     tg_app.add_handler(CommandHandler("compras", cmd_compras))
     tg_app.add_handler(CommandHandler("notas", cmd_notas))
+    tg_app.add_handler(CommandHandler("painel", cmd_painel))
     tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     tg_app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     tg_app.add_handler(MessageHandler(filters.LOCATION, handle_location))

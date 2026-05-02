@@ -30,7 +30,18 @@ WEBAPP_ORIGIN = os.environ.get("WEBAPP_ORIGIN", f"http://localhost:8000")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 DB_PATH = os.environ.get("DB_PATH", "history.db")
-SETUP_TOKEN = os.environ.get("SETUP_TOKEN", "")
+
+_setup_serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="passkey-setup")
+
+def generate_setup_token() -> str:
+    return _setup_serializer.dumps("setup")
+
+def _verify_setup_token(token: str) -> bool:
+    try:
+        _setup_serializer.loads(token, max_age=300)
+        return True
+    except (BadSignature, SignatureExpired):
+        return False
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -100,7 +111,7 @@ async def login_page(request: Request):
     with _get_db() as conn:
         has_credential = conn.execute("SELECT 1 FROM webauthn_credentials LIMIT 1").fetchone() is not None
     token = request.query_params.get("token", "")
-    setup_mode = bool(SETUP_TOKEN and secrets.compare_digest(token, SETUP_TOKEN))
+    setup_mode = _verify_setup_token(token)
     return templates.TemplateResponse("login.html", {
         "request": request,
         "has_credential": has_credential,
@@ -122,8 +133,7 @@ async def register_begin(request: Request):
     with _get_db() as conn:
         has_credential = conn.execute("SELECT 1 FROM webauthn_credentials LIMIT 1").fetchone() is not None
     token = request.query_params.get("token", "")
-    token_ok = SETUP_TOKEN and secrets.compare_digest(token, SETUP_TOKEN)
-    if has_credential and not user_id and not token_ok:
+    if has_credential and not user_id and not _verify_setup_token(token):
         raise HTTPException(403, "Já registrado")
     options = webauthn.generate_registration_options(
         rp_id=WEBAPP_DOMAIN,
