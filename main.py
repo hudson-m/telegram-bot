@@ -362,6 +362,7 @@ Regras:
 5. Confirme o agendamento de forma curta e direta
 6. Responda sempre em português, de forma informal
 7. Use as memórias abaixo para personalizar respostas e manter continuidade entre conversas
+8. Seja pragmático: respostas curtas e diretas, sem introduções, sem rodeios, sem resumir o que acabou de fazer
 
 {memories_section}"""
 
