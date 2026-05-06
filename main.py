@@ -693,6 +693,56 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
         text="\n".join(lines)
     )
 
+async def check_ligga_arena_games(context: ContextTypes.DEFAULT_TYPE):
+    if not ALLOWED_USER_ID:
+        return
+    tz = pytz.timezone(TIMEZONE)
+    now = datetime.now(tz)
+    if now.weekday() != 0:  # 0 = segunda-feira
+        return
+
+    week_end = now + timedelta(days=6)
+    query = f"Athletico Paranaense jogos {now.strftime('%d/%m')} a {week_end.strftime('%d/%m/%Y')} Ligga Arena CAP"
+    try:
+        results = tavily_client.search(query, max_results=5)
+        content = "\n".join(r.get("content", "") for r in results.get("results", []))
+        if not content.strip():
+            return
+
+        response = claude.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            messages=[{"role": "user", "content": f"""A partir do texto abaixo, identifique jogos do Athletico Paranaense NA Ligga Arena (apenas jogos em casa) entre {now.strftime('%d/%m')} e {week_end.strftime('%d/%m')}.
+
+Responda SOMENTE em JSON:
+{{"games": [{{"date": "dd/mm", "weekday": "dia da semana em português", "opponent": "adversário", "time": "HHhMM ou null"}}]}}
+Se não houver: {{"games": []}}
+
+Texto:
+{content[:3000]}"""}]
+        )
+        text = response.content[0].text
+        data = json.loads(text[text.find("{"):text.rfind("}") + 1])
+        games = data.get("games", [])
+        if not games:
+            return
+
+        lines = ["🏟️ Jogo na Ligga Arena essa semana:"]
+        has_thursday = False
+        for g in games:
+            time_str = f" às {g['time']}" if g.get("time") else ""
+            lines.append(f"• {g['weekday']} {g['date']}{time_str} — Athletico x {g['opponent']}")
+            if "quinta" in g.get("weekday", "").lower():
+                has_thursday = True
+
+        if has_thursday:
+            lines.append("\n⚠️ Tem jogo na quinta — vai ter trânsito pesado perto do estádio, considera não ir de carro.")
+
+        await context.bot.send_message(chat_id=ALLOWED_USER_ID, text="\n".join(lines))
+    except Exception:
+        logging.exception("Erro ao verificar jogos na Ligga Arena")
+
+
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE):
     logging.error("Unhandled exception", exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
@@ -723,6 +773,7 @@ async def main():
     tg_app.job_queue.run_repeating(check_reminders, interval=300, first=30)
     tz = pytz.timezone(TIMEZONE)
     tg_app.job_queue.run_daily(send_daily_summary, time=dt_time(7, 0, 0, tzinfo=tz))
+    tg_app.job_queue.run_daily(check_ligga_arena_games, time=dt_time(8, 0, 0, tzinfo=tz))
 
     port = int(os.environ.get("PORT", "8000"))
     web_server = uvicorn.Server(uvicorn.Config(web_app, host="0.0.0.0", port=port, log_level="info"))
