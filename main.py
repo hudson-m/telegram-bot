@@ -642,6 +642,25 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
 
 WEEKDAYS_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
 
+def _get_weather_curitiba() -> str:
+    try:
+        url = "https://wttr.in/Curitiba?format=j1"
+        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        current = data["current_condition"][0]
+        today = data["weather"][0]
+        desc = current["weatherDesc"][0]["value"]
+        temp_max = today["maxtempC"]
+        temp_min = today["mintempC"]
+        rain_chance = max(int(h["chanceofrain"]) for h in today["hourly"])
+        result = f"🌤 {desc}, {temp_min}–{temp_max}°C"
+        if rain_chance >= 50:
+            result += f", {rain_chance}% chance de chuva"
+        return result
+    except Exception:
+        return "🌤 Não consegui buscar a previsão do tempo hoje."
+
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
     if not ALLOWED_USER_ID:
         return
@@ -667,15 +686,19 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
     all_events.sort(key=lambda e: e["start"])
     weekday = WEEKDAYS_PT[now.weekday()]
     date_str = f"{weekday}, {now.strftime('%d/%m')}"
+    weather = _get_weather_curitiba()
 
     if not all_events:
-        await context.bot.send_message(
-            chat_id=ALLOWED_USER_ID,
-            text=f"Bom dia! Agenda de hoje ({date_str}) está livre."
-        )
+        text = f"Bom dia! Agenda de hoje ({date_str}) está livre."
+        if weather:
+            text += f"\n{weather}"
+        await context.bot.send_message(chat_id=ALLOWED_USER_ID, text=text)
         return
 
-    lines = [f"Bom dia! Agenda de hoje — {date_str}:\n"]
+    lines = [f"Bom dia! Agenda de hoje — {date_str}:"]
+    if weather:
+        lines.append(weather)
+    lines.append("")
     for e in all_events:
         start_str = e["start"]
         if "T" in start_str:
