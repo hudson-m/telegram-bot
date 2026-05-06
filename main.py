@@ -659,6 +659,7 @@ def _get_weather_curitiba() -> str:
             result += f", {rain_chance}% chance de chuva"
         return result
     except Exception:
+        logging.exception("Erro ao buscar previsão do tempo")
         return "🌤 Não consegui buscar a previsão do tempo hoje."
 
 async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
