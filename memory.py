@@ -10,14 +10,14 @@ DB_PATH = os.environ.get("DB_PATH", "history.db")
 EXTRACT_PROMPT = """Analise essa conversa e extraia fatos importantes sobre o usuário que valem ser lembrados no futuro.
 
 Vale lembrar:
-- Compromissos agendados ou cancelados
 - Preferências mencionadas
-- Informações pessoais relevantes
-- Pendências ou intenções ("quer marcar X em breve")
+- Informações pessoais relevantes (saúde, rotina, família, etc.)
+- Locais frequentados — formato: "local do X: endereço completo" (ex: "local da fonodióloga: Rua Visconde do Rio Branco, 1341")
+- Pendências ou intenções com contexto concreto (ex: "quer remarcar academia para segunda-feira de manhã")
 - Qualquer contexto útil para futuras conversas
 
 Retorne SOMENTE um JSON válido, sem texto antes ou depois:
-{"memories": ["fato 1", "fato 2"]}
+{"memories": ["prefere reuniões de manhã", "local da fonodióloga: Rua Visconde do Rio Branco, 1341"]}
 
 Se não houver nada relevante: {"memories": []}
 
