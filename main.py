@@ -696,6 +696,7 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
                 e["calendar"] = cal_name
             all_events.extend(events)
         except Exception:
+            logging.exception(f"Erro ao listar eventos do calendário '{cal_name}'")
             continue
 
     all_events.sort(key=lambda e: e["start"])
