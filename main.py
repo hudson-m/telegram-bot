@@ -642,18 +642,32 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
 
 WEEKDAYS_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
 
+_WMO_DESC = {
+    0: "Céu limpo", 1: "Predominantemente limpo", 2: "Parcialmente nublado", 3: "Nublado",
+    45: "Neblina", 48: "Neblina com geada",
+    51: "Garoa leve", 53: "Garoa moderada", 55: "Garoa intensa",
+    61: "Chuva leve", 63: "Chuva moderada", 65: "Chuva forte",
+    71: "Neve leve", 73: "Neve moderada", 75: "Neve forte",
+    80: "Pancadas de chuva leves", 81: "Pancadas de chuva moderadas", 82: "Pancadas de chuva fortes",
+    95: "Tempestade", 96: "Tempestade com granizo", 99: "Tempestade com granizo forte",
+}
+
 def _get_weather_curitiba() -> str:
     try:
-        url = "https://wttr.in/Curitiba?format=j1"
-        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        url = (
+            "https://api.open-meteo.com/v1/forecast"
+            "?latitude=-25.4284&longitude=-49.2733"
+            "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode"
+            "&timezone=America%2FSao_Paulo&forecast_days=1"
+        )
+        with urllib.request.urlopen(url, timeout=5) as resp:
             data = json.loads(resp.read())
-        current = data["current_condition"][0]
-        today = data["weather"][0]
-        desc = current["weatherDesc"][0]["value"]
-        temp_max = today["maxtempC"]
-        temp_min = today["mintempC"]
-        rain_chance = max(int(h["chanceofrain"]) for h in today["hourly"])
+        daily = data["daily"]
+        code = daily["weathercode"][0]
+        temp_max = round(daily["temperature_2m_max"][0])
+        temp_min = round(daily["temperature_2m_min"][0])
+        rain_chance = daily["precipitation_probability_max"][0]
+        desc = _WMO_DESC.get(code, "Tempo variável")
         result = f"🌤 {desc}, {temp_min}–{temp_max}°C"
         if rain_chance >= 50:
             result += f", {rain_chance}% chance de chuva"
