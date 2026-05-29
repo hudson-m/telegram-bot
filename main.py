@@ -193,14 +193,20 @@ TOOLS = [
                 "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"]}
             },
             "required": ["event_id", "calendar"]
-        }
+        },
+        "cache_control": {"type": "ephemeral"}
     }
 ]
 
 def _iso_with_tz(dt_str: str) -> str:
     if not dt_str:
         return dt_str
-    if "+" not in dt_str and "Z" not in dt_str and len(dt_str) >= 16:
+    if "+" in dt_str or "Z" in dt_str:
+        return dt_str
+    # Check for negative offset in the time portion (after 'T')
+    if "T" in dt_str and "-" in dt_str.split("T", 1)[1]:
+        return dt_str
+    if len(dt_str) >= 16:
         return dt_str + "-03:00"
     return dt_str
 
@@ -392,7 +398,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
         response = claude.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
-            system=system_prompt,
+            system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             tools=TOOLS,
             messages=messages
         )
@@ -660,7 +666,7 @@ def _get_weather_curitiba() -> str:
             "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode"
             "&timezone=America%2FSao_Paulo&forecast_days=1"
         )
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        with urllib.request.urlopen(url, timeout=10) as resp:
             data = json.loads(resp.read())
         daily = data["daily"]
         code = daily["weathercode"][0]
