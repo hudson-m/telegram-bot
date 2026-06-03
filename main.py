@@ -397,7 +397,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
     while True:
         response = await claude.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=4096,
             system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             tools=TOOLS,
             messages=messages
