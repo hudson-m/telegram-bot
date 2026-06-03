@@ -5,7 +5,7 @@ import os
 from crypto import encrypt, decrypt
 
 DB_PATH = os.environ.get("DB_PATH", "history.db")
-MAX_MESSAGES = 20
+MAX_MESSAGES = 10
 
 
 def _get_db() -> sqlite3.Connection:

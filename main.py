@@ -322,8 +322,8 @@ def execute_tool(name: str, inp: dict) -> str:
             return json.dumps({"blocked": keywords})
 
     elif name == "web_search":
-        results = tavily_client.search(inp["query"], max_results=5)
-        items = [{"title": r["title"], "url": r["url"], "content": r["content"]} for r in results.get("results", [])]
+        results = tavily_client.search(inp["query"], max_results=3)
+        items = [{"title": r["title"], "url": r["url"], "content": r["content"][:400]} for r in results.get("results", [])]
         return json.dumps(items, ensure_ascii=False)
 
     elif name == "update_event":
@@ -369,6 +369,7 @@ Regras:
 6. Responda sempre em português, de forma informal
 7. Use as memórias abaixo para personalizar respostas e manter continuidade entre conversas
 8. Seja pragmático: respostas curtas e diretas, sem introduções, sem rodeios, sem resumir o que acabou de fazer
+9. Não liste eventos do calendário a menos que o usuário peça explicitamente — crie ou atualize o evento e confirme de forma curta
 
 {memories_section}"""
 
