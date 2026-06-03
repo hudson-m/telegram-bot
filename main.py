@@ -386,10 +386,7 @@ def _serialize_content(content):
     return [block.model_dump() if hasattr(block, "model_dump") else block for block in content]
 
 async def process_message(user_id: int, text: str, media_blocks: list = None) -> str:
-    call_id = id(object())
-    logging.info(f"[PM:{call_id}] start user={user_id} text={repr(text[:80])}")
     messages = get_history(user_id)
-    logging.info(f"[PM:{call_id}] history_len={len(messages)}")
     if media_blocks:
         user_content = media_blocks + [{"type": "text", "text": text or "O que é isso?"}]
     else:
@@ -397,10 +394,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
     messages.append({"role": "user", "content": user_content})
     system_prompt = build_system_prompt(user_id)
 
-    iteration = 0
     while True:
-        iteration += 1
-        logging.info(f"[PM:{call_id}] claude_call iteration={iteration} messages_len={len(messages)}")
         response = await claude.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
@@ -408,7 +402,6 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             tools=TOOLS,
             messages=messages
         )
-        logging.info(f"[PM:{call_id}] stop_reason={response.stop_reason} content_types={[b.type if hasattr(b,'type') else type(b).__name__ for b in response.content]}")
         log_usage("claude-sonnet-4-6", response.usage.input_tokens, response.usage.output_tokens)
         if response.stop_reason == "end_turn":
             serialized = _serialize_content(response.content)
@@ -417,17 +410,13 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             asyncio.get_event_loop().run_in_executor(None, extract_and_save, user_id, messages)
             for block in response.content:
                 if hasattr(block, "text"):
-                    logging.info(f"[PM:{call_id}] returning text len={len(block.text)}")
                     return block.text
-            logging.info(f"[PM:{call_id}] returning Feito!")
             return "Feito!"
         if response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    logging.info(f"[PM:{call_id}] tool={block.name} input={json.dumps(block.input)[:200]}")
                     result = execute_tool(block.name, block.input)
-                    logging.info(f"[PM:{call_id}] tool_result={result[:200]}")
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -436,7 +425,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             messages.append({"role": "assistant", "content": _serialize_content(response.content)})
             messages.append({"role": "user", "content": tool_results})
         else:
-            logging.warning(f"[PM:{call_id}] unexpected stop_reason={response.stop_reason}")
+            logging.warning(f"unexpected stop_reason={response.stop_reason}")
             return "Algo deu errado, tente novamente."
 
 def _reply_prefix(message) -> str:
@@ -459,7 +448,6 @@ def _reply_prefix(message) -> str:
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and update.effective_user.id != ALLOWED_USER_ID:
         return
-    logging.info(f"[HANDLER] handle_message update_id={update.update_id} msg_id={update.message.message_id} edit_date={update.message.edit_date} text={repr((update.message.text or '')[:60])}")
     await update.message.reply_chat_action("typing")
     text = _reply_prefix(update.message) + (update.message.text or "")
     reply = await process_message(update.effective_user.id, text)
