@@ -51,7 +51,7 @@ credentials = service_account.Credentials.from_service_account_info(
     scopes=["https://www.googleapis.com/auth/calendar"]
 )
 calendar_service = build("calendar", "v3", credentials=credentials)
-claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+claude = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
 tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 
@@ -395,7 +395,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
     system_prompt = build_system_prompt(user_id)
 
     while True:
-        response = claude.messages.create(
+        response = await claude.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             system=[{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
@@ -754,7 +754,7 @@ async def check_ligga_arena_games(context: ContextTypes.DEFAULT_TYPE):
         if not content.strip():
             return
 
-        response = claude.messages.create(
+        response = await claude.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=400,
             messages=[{"role": "user", "content": f"""A partir do texto abaixo, identifique jogos do Athletico Paranaense NA Ligga Arena (apenas jogos em casa) entre {now.strftime('%d/%m')} e {week_end.strftime('%d/%m')}.
