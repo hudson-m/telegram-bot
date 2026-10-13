@@ -39,11 +39,18 @@ ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 TIMEZONE = "America/Sao_Paulo"
 REMINDER_MINUTES = int(os.environ.get("REMINDER_MINUTES", "30"))
 
+PANEL_URL = os.environ.get("WEBAPP_ORIGIN", "http://localhost:8000")
+
+# IDs dos calendários vêm do ambiente; só "principal" é obrigatório
 CALENDARS = {
-    "principal": "seu_email@gmail.com",
-    "saude": "CALENDAR_ID_SAUDE",
-    "trabalho": "CALENDAR_ID_TRABALHO",
-    "aulas": "CALENDAR_ID_AULAS",
+    name: cal_id
+    for name, cal_id in {
+        "principal": os.environ["CALENDAR_PRINCIPAL"],
+        "saude": os.environ.get("CALENDAR_SAUDE"),
+        "trabalho": os.environ.get("CALENDAR_TRABALHO"),
+        "aulas": os.environ.get("CALENDAR_AULAS"),
+    }.items()
+    if cal_id
 }
 
 credentials = service_account.Credentials.from_service_account_info(
@@ -70,7 +77,7 @@ TOOLS = [
                 "summary": {"type": "string", "description": "Título do evento"},
                 "start_datetime": {"type": "string", "description": "Início no formato ISO 8601, ex: 2026-05-01T14:00:00"},
                 "end_datetime": {"type": "string", "description": "Fim no formato ISO 8601"},
-                "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"], "description": "Qual calendário usar"},
+                "calendar": {"type": "string", "enum": list(CALENDARS), "description": "Qual calendário usar"},
                 "description": {"type": "string"},
                 "location": {"type": "string"}
             },
@@ -85,14 +92,14 @@ TOOLS = [
             "properties": {
                 "time_min": {"type": "string", "description": "Início da busca ISO 8601"},
                 "time_max": {"type": "string", "description": "Fim da busca ISO 8601"},
-                "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"], "description": "Calendário para buscar (padrão: principal)"}
+                "calendar": {"type": "string", "enum": list(CALENDARS), "description": "Calendário para buscar (padrão: principal)"}
             },
             "required": ["time_min", "time_max"]
         }
     },
     {
         "name": "shopping_list",
-        "description": "Gerencia a lista de compras do Hudson. Use para adicionar itens, listar o que tem na lista, remover um item ou limpar tudo.",
+        "description": "Gerencia a lista de compras do usuário. Use para adicionar itens, listar o que tem na lista, remover um item ou limpar tudo.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -109,7 +116,7 @@ TOOLS = [
     },
     {
         "name": "notes",
-        "description": "Bloco de notas do Hudson. Use para salvar informações avulsas que ele quer recuperar depois (senhas, ideias, lembretes sem data, etc), buscar notas antigas ou apagar uma nota.",
+        "description": "Bloco de notas do usuário. Use para salvar informações avulsas que ele quer recuperar depois (senhas, ideias, lembretes sem data, etc), buscar notas antigas ou apagar uma nota.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -127,7 +134,7 @@ TOOLS = [
     },
     {
         "name": "nearby_places",
-        "description": "Busca lugares próximos a uma localização. Use quando o Hudson perguntar o que tem perto dele ou quiser achar um lugar específico na região.",
+        "description": "Busca lugares próximos a uma localização. Use quando o usuário perguntar o que tem perto dele ou quiser achar um lugar específico na região.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -141,7 +148,7 @@ TOOLS = [
     },
     {
         "name": "reminder_filter",
-        "description": "Gerencia quais eventos o Hudson NÃO quer receber lembretes. Use quando ele pedir para ignorar ou voltar a receber lembretes de algo.",
+        "description": "Gerencia quais eventos o usuário NÃO quer receber lembretes. Use quando ele pedir para ignorar ou voltar a receber lembretes de algo.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -173,7 +180,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "event_id": {"type": "string"},
-                "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"]},
+                "calendar": {"type": "string", "enum": list(CALENDARS)},
                 "summary": {"type": "string", "description": "Novo título (opcional)"},
                 "start_datetime": {"type": "string", "description": "Novo início ISO 8601 (opcional)"},
                 "end_datetime": {"type": "string", "description": "Novo fim ISO 8601 (opcional)"},
@@ -190,7 +197,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "event_id": {"type": "string"},
-                "calendar": {"type": "string", "enum": ["principal", "saude", "trabalho", "aulas"]}
+                "calendar": {"type": "string", "enum": list(CALENDARS)}
             },
             "required": ["event_id", "calendar"]
         },
@@ -296,7 +303,7 @@ def execute_tool(name: str, inp: dict) -> str:
             "key": GOOGLE_MAPS_API_KEY
         })
         url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?{params}"
-        with urllib.request.urlopen(url) as resp:
+        with urllib.request.urlopen(url, timeout=10) as resp:
             data = json.loads(resp.read())
         places = [
             {
@@ -349,7 +356,7 @@ def execute_tool(name: str, inp: dict) -> str:
 
     return json.dumps({"error": "Ferramenta desconhecida"})
 
-BASE_SYSTEM_PROMPT = """Você é o assistente pessoal do Hudson, morando em Curitiba-PR (fuso America/Sao_Paulo).
+BASE_SYSTEM_PROMPT = """Você é o assistente pessoal do usuário, que mora em Curitiba-PR (fuso America/Sao_Paulo).
 Sua função principal é gerenciar a agenda dele no Google Calendar e ser um assistente de confiança.
 
 Calendários:
@@ -358,7 +365,7 @@ Calendários:
 - trabalho: reuniões e compromissos profissionais
 - aulas: cursos, aulas particulares, workshops
 
-Painel web: https://seu-app.up.railway.app — o Hudson pode acessar para ver memórias, notas, lista de compras e custos de API. Mencione quando relevante.
+Painel web: {panel_url} — o usuário pode acessar para ver memórias, notas, lista de compras e custos de API. Mencione quando relevante.
 
 Regras:
 1. Sempre chame get_current_datetime quando precisar saber a data/hora atual — inclusive para responder perguntas sobre dia, hora ou data, não só para criar eventos
@@ -376,10 +383,10 @@ Regras:
 def build_system_prompt(user_id: int) -> str:
     memories = get_memories(user_id)
     if memories:
-        memories_text = "Memórias sobre o Hudson:\n" + "\n".join(f"- {m}" for m in memories)
+        memories_text = "Memórias sobre o usuário:\n" + "\n".join(f"- {m}" for m in memories)
     else:
         memories_text = "Nenhuma memória registrada ainda."
-    return BASE_SYSTEM_PROMPT.format(memories_section=memories_text)
+    return BASE_SYSTEM_PROMPT.format(memories_section=memories_text, panel_url=PANEL_URL)
 
 def _serialize_content(content):
     if not isinstance(content, list):
@@ -408,7 +415,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             serialized = _serialize_content(response.content)
             messages.append({"role": "assistant", "content": serialized})
             save_history(user_id, messages)
-            asyncio.get_event_loop().run_in_executor(None, extract_and_save, user_id, messages)
+            asyncio.get_running_loop().run_in_executor(None, extract_and_save, user_id, messages)
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text
@@ -417,7 +424,7 @@ async def process_message(user_id: int, text: str, media_blocks: list = None) ->
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    result = execute_tool(block.name, block.input)
+                    result = await asyncio.to_thread(execute_tool, block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -460,7 +467,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_chat_action("typing")
     voice_file = await update.message.voice.get_file()
     audio_bytes = await voice_file.download_as_bytearray()
-    transcription = groq_client.audio.transcriptions.create(
+    transcription = await asyncio.to_thread(
+        groq_client.audio.transcriptions.create,
         file=("voice.ogg", bytes(audio_bytes)),
         model="whisper-large-v3-turbo",
         language="pt"
@@ -609,7 +617,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE):
     pending: list[str] = []
     for cal_name in CALENDARS:
         try:
-            events = json.loads(execute_tool("list_events", {
+            events = json.loads(await asyncio.to_thread(execute_tool, "list_events", {
                 "time_min": now.isoformat(),
                 "time_max": window_end.isoformat(),
                 "calendar": cal_name
@@ -695,7 +703,7 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
     all_events = []
     for cal_name in CALENDARS:
         try:
-            events = json.loads(execute_tool("list_events", {
+            events = json.loads(await asyncio.to_thread(execute_tool, "list_events", {
                 "time_min": start_of_day.isoformat(),
                 "time_max": end_of_day.isoformat(),
                 "calendar": cal_name
@@ -710,7 +718,7 @@ async def send_daily_summary(context: ContextTypes.DEFAULT_TYPE):
     all_events.sort(key=lambda e: e["start"])
     weekday = WEEKDAYS_PT[now.weekday()]
     date_str = f"{weekday}, {now.strftime('%d/%m')}"
-    weather = _get_weather_curitiba()
+    weather = await asyncio.to_thread(_get_weather_curitiba)
 
     if not all_events:
         text = f"Bom dia! Agenda de hoje ({date_str}) está livre."
@@ -751,7 +759,7 @@ async def check_ligga_arena_games(context: ContextTypes.DEFAULT_TYPE):
     week_end = now + timedelta(days=6)
     query = f"Athletico Paranaense jogos {now.strftime('%d/%m')} a {week_end.strftime('%d/%m/%Y')} Ligga Arena CAP"
     try:
-        results = tavily_client.search(query, max_results=5)
+        results = await asyncio.to_thread(tavily_client.search, query, max_results=5)
         content = "\n".join(r.get("content", "") for r in results.get("results", []))
         if not content.strip():
             return

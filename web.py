@@ -28,6 +28,7 @@ from usage import get_daily_usage, get_totals
 WEBAPP_DOMAIN = os.environ.get("WEBAPP_DOMAIN", "localhost")
 WEBAPP_ORIGIN = os.environ.get("WEBAPP_ORIGIN", f"http://localhost:8000")
 SESSION_SECRET = os.environ.get("SESSION_SECRET", secrets.token_hex(32))
+COOKIE_SECURE = WEBAPP_ORIGIN.startswith("https://")
 ALLOWED_USER_ID = int(os.environ.get("TELEGRAM_USER_ID", "0"))
 DB_PATH = os.environ.get("DB_PATH", "history.db")
 
@@ -137,10 +138,10 @@ async def register_begin(request: Request):
         raise HTTPException(403, "Já registrado")
     options = webauthn.generate_registration_options(
         rp_id=WEBAPP_DOMAIN,
-        rp_name="Assistente do Hudson",
-        user_id=b"hudson",
-        user_name="hudson",
-        user_display_name="Hudson",
+        rp_name="Assistente pessoal",
+        user_id=b"owner",
+        user_name="owner",
+        user_display_name="Owner",
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.REQUIRED,
             user_verification=UserVerificationRequirement.REQUIRED,
@@ -174,7 +175,7 @@ async def register_complete(request: Request):
         )
     response = JSONResponse({"success": True})
     response.set_cookie("session", _serializer().dumps({"user_id": ALLOWED_USER_ID}),
-                        httponly=True, samesite="lax", max_age=86400 * 30)
+                        httponly=True, secure=COOKIE_SECURE, samesite="lax", max_age=86400 * 30)
     return response
 
 
@@ -224,7 +225,7 @@ async def login_complete(request: Request):
                      (verification.new_sign_count, row[0]))
     response = JSONResponse({"success": True})
     response.set_cookie("session", _serializer().dumps({"user_id": ALLOWED_USER_ID}),
-                        httponly=True, samesite="lax", max_age=86400 * 30)
+                        httponly=True, secure=COOKIE_SECURE, samesite="lax", max_age=86400 * 30)
     return response
 
 

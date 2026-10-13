@@ -31,19 +31,29 @@ Assistente pessoal no Telegram com integração ao Google Calendar, memória per
 | `/remember <fato>` | Adiciona uma memória manualmente |
 | `/forget <id>` | Remove uma memória pelo ID |
 | `/compras` | Exibe a lista de compras |
+| `/notas` | Lista as notas salvas |
+| `/painel` | Gera link temporário para o painel web |
 
 ## Variáveis de ambiente
 
-```env
-TELEGRAM_BOT_TOKEN=
-ANTHROPIC_API_KEY=
-GROQ_API_KEY=
-TAVILY_API_KEY=
-TELEGRAM_USER_ID=
-GOOGLE_SERVICE_ACCOUNT_JSON=
-DB_PATH=/data/history.db
-REMINDER_MINUTES=30
-```
+Todas estão documentadas em [`.env.example`](.env.example). Resumo:
+
+| Variável | Obrigatória | Uso |
+|----------|:-----------:|-----|
+| `TELEGRAM_BOT_TOKEN` | ✅ | Token do BotFather |
+| `TELEGRAM_USER_ID` | ✅ | Único usuário atendido (descubra com `/myid`) |
+| `ANTHROPIC_API_KEY` | ✅ | Claude (conversa e ferramentas) |
+| `GROQ_API_KEY` | ✅ | Transcrição de voz |
+| `TAVILY_API_KEY` | ✅ | Busca na web |
+| `GOOGLE_MAPS_API_KEY` | ✅ | Lugares próximos |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | ✅ | Acesso ao Google Calendar |
+| `CALENDAR_PRINCIPAL` | ✅ | ID do calendário principal |
+| `CALENDAR_SAUDE` / `CALENDAR_TRABALHO` / `CALENDAR_AULAS` | | Calendários extras (omitidos se vazios) |
+| `ENCRYPTION_KEY` | ✅ | Chave Fernet para as notas |
+| `SESSION_SECRET` | recomendada | Assina sessão do painel (sem ela, sessões caem a cada restart) |
+| `WEBAPP_DOMAIN` / `WEBAPP_ORIGIN` | em produção | Domínio/origem do painel (passkeys) |
+| `DB_PATH` | | Caminho do SQLite (padrão `history.db`) |
+| `REMINDER_MINUTES` | | Antecedência dos lembretes (padrão 30) |
 
 ## Setup local
 
@@ -59,7 +69,8 @@ venv/Scripts/python main.py
 1. Conecta o repositório no Railway
 2. Adiciona todas as variáveis de ambiente
 3. Cria um Volume com mount path `/data`
-4. O serviço é do tipo **worker** (sem porta exposta)
+4. Gera um domínio público para o serviço e configura `WEBAPP_DOMAIN` / `WEBAPP_ORIGIN` com ele (o painel web roda na porta `PORT`)
+5. No Telegram, use `/painel` para receber o link de registro da passkey
 
 ## Estrutura
 
@@ -69,4 +80,7 @@ conversation.py  # histórico de sessão (SQLite)
 memory.py        # memória persistente com extração via LLM
 reminders.py     # controle de lembretes enviados
 shopping.py      # lista de compras (SQLite)
+notes.py         # bloco de notas criptografado (SQLite + Fernet)
+usage.py         # custo de tokens por modelo
+web.py           # painel web (FastAPI + passkeys/WebAuthn)
 ```
